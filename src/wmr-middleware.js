@@ -29,6 +29,8 @@ const NOOP = () => {};
  */
 const WRITE_CACHE = new Map();
 
+export const moduleGraph = new Map();
+
 /**
  * @param {object} [options]
  * @param {string} [options.cwd = '.']
@@ -119,6 +121,7 @@ export default function wmrMiddleware({
 		pendingChanges.clear();
 	}
 	watcher.on('change', filename => {
+		console.log('changed', filename);
 		NonRollup.watchChange(resolve(cwd, filename));
 		// normalize paths to 'nix:
 		filename = filename.split(sep).join(posix.sep);
@@ -291,6 +294,11 @@ export const TRANSFORMS = {
 				if (spec === 'wmr') return '/_wmr.js';
 				if (/^(data:|https?:|\/\/)/.test(spec)) return spec;
 
+				if (!moduleGraph.has(importer)) {
+					moduleGraph.set(importer, { dependencies: new Set(), dependents: new Set(), acceptingUpdates: false });
+				}
+				const mod = moduleGraph.get(importer);
+
 				// const resolved = await NonRollup.resolveId(spec, importer);
 				const resolved = await NonRollup.resolveId(spec, file);
 				if (resolved) {
@@ -339,6 +347,11 @@ export const TRANSFORMS = {
 					spec = `/@npm/${meta.module}${meta.path ? '/' + meta.path : ''}`;
 				}
 
+				mod.dependencies.add(spec);
+				if (!moduleGraph.has(spec)) {
+					moduleGraph.set(spec, { dependencies: new Set(), dependents: new Set(), acceptingUpdates: false });
+				}
+				moduleGraph.get(spec).dependents.add(importer);
 				return spec;
 			}
 		});
